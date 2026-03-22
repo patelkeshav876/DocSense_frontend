@@ -31,16 +31,8 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => {
-    if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('token');
-      if (token) {
-        return { id: 'temp', email: 'temp@example.com' };
-      }
-    }
-    return null;
-  });
-  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true); // start true, resolve after token check
 
   const logout = () => {
     localStorage.removeItem('token');
@@ -49,11 +41,58 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   };
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-    if (token) {
-      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-    }
+    // On mount: check if a valid token exists by calling a protected endpoint
+    const initAuth = async () => {
+      const token = localStorage.getItem('token');
 
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      // Set the token header first
+      axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+      try {
+        // Validate the token is still good by fetching documents
+        // (any protected endpoint works — we just need a 200 vs 401)
+        await axios.get('http://localhost:8000/documents/', {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        // Token is valid — decode email from JWT payload
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          setUser({ id: payload.sub || 'user', email: payload.sub || '' });
+        } catch {
+          // Can't decode payload — still mark as logged in with fallback
+          setUser({ id: 'user', email: '' });
+        }
+      } catch (err: unknown) {
+        // 401 = token expired or invalid — clear it
+        if (
+          axios.isAxiosError(err) &&
+          err.response?.status === 401
+        ) {
+          localStorage.removeItem('token');
+          delete axios.defaults.headers.common['Authorization'];
+          setUser(null);
+        } else {
+          // Network error or other — keep token, assume valid
+          // (prevents logout on backend restart / offline)
+          try {
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            setUser({ id: payload.sub || 'user', email: payload.sub || '' });
+          } catch {
+            setUser({ id: 'user', email: '' });
+          }
+        }
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    // Axios request interceptor — always inject latest token
     const requestInterceptor = axios.interceptors.request.use(
       (config) => {
         const localToken = localStorage.getItem('token');
@@ -65,18 +104,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       (error) => Promise.reject(error)
     );
 
+    // Axios response interceptor — auto-logout on 401
     const responseInterceptor = axios.interceptors.response.use(
       (response) => response,
       (error) => {
         if (error.response?.status === 401) {
-          logout();
+          // Only auto-logout if we're not in the middle of initAuth
+          if (localStorage.getItem('token')) {
+            logout();
+          }
         }
         return Promise.reject(error);
       }
     );
 
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setLoading(false);
+    initAuth();
 
     return () => {
       axios.interceptors.request.eject(requestInterceptor);
@@ -85,14 +127,21 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const response = await axios.post('http://localhost:8000/auth/token', new URLSearchParams({
-      username: email,
-      password,
-    }));
+    const response = await axios.post(
+      'http://localhost:8000/auth/token',
+      new URLSearchParams({ username: email, password })
+    );
     const { access_token } = response.data;
     localStorage.setItem('token', access_token);
     axios.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-    setUser({ id: 'temp', email }); // TODO: get from token
+
+    // Decode email from JWT
+    try {
+      const payload = JSON.parse(atob(access_token.split('.')[1]));
+      setUser({ id: payload.sub || 'user', email: payload.sub || email });
+    } catch {
+      setUser({ id: 'user', email });
+    }
   };
 
   const register = async (email: string, password: string) => {
@@ -100,13 +149,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     await login(email, password);
   };
 
-  const value = {
-    user,
-    login,
-    register,
-    logout,
-    loading,
-  };
-
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  return (
+    <AuthContext.Provider value={{ user, login, register, logout, loading }}>
+      {children}
+    </AuthContext.Provider>
+  );
 };

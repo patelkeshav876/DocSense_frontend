@@ -1,8 +1,8 @@
 'use client';
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../lib/api';
 
 interface Message {
   id: string;
@@ -57,7 +57,7 @@ const Chat: React.FC<ChatProps> = ({ docId }) => {
     if (!user) return;
     try {
       const token = localStorage.getItem('token');
-      const res = await axios.get(`http://localhost:8000/chat/${docId}/history`, {
+      const res = await api.get(`/chat/${docId}/history`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       setMessages(res.data);
@@ -71,7 +71,7 @@ const Chat: React.FC<ChatProps> = ({ docId }) => {
     const fetchDoc = async () => {
       try {
         const token = localStorage.getItem('token');
-        const res = await axios.get(`http://localhost:8000/documents/${docId}`, {
+        const res = await api.get(`/documents/${docId}`, {
           headers: { Authorization: `Bearer ${token}` },
         });
         setDocName(res.data.filename || 'Document');
@@ -109,10 +109,10 @@ const Chat: React.FC<ChatProps> = ({ docId }) => {
 
     try {
       const token = localStorage.getItem('token');
-      await axios.post(`http://localhost:8000/chat/${docId}/ask`, { question }, {
+      await api.post(`/chat/${docId}/ask`, { question }, {
         headers: { Authorization: `Bearer ${token}` },
       });
-      const res = await axios.get(`http://localhost:8000/chat/${docId}/history`, {
+      const res = await api.get(`/chat/${docId}/history`, {
         headers: { Authorization: `Bearer ${token}` },
       });
       const newMsgs: Message[] = res.data;

@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../lib/api';
 
 interface Document {
   id: string;
@@ -166,7 +166,7 @@ const Dashboard: React.FC = () => {
   const fetchDocuments = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await axios.get('http://localhost:8000/documents/', {
+      const response = await api.get('/documents/', {
         headers: { Authorization: `Bearer ${token}` },
       });
       setDocuments(response.data);
@@ -195,7 +195,7 @@ const Dashboard: React.FC = () => {
 
     try {
       const token = localStorage.getItem('token');
-      await axios.post('http://localhost:8000/documents/upload', formData, {
+      await api.post('/documents/upload', formData, {
         headers: { 'Content-Type': 'multipart/form-data', Authorization: `Bearer ${token}` },
       });
       setUploadProgress(100);

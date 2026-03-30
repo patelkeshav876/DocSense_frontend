@@ -128,26 +128,39 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, []);
 
   const login = async (email: string, password: string) => {
-    const response = await api.post(
-      '/auth/token',
-      new URLSearchParams({ username: email, password })
-    );
-    const { access_token } = response.data;
-    localStorage.setItem('token', access_token);
-    api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
-
-    // Decode email from JWT
     try {
-      const payload = JSON.parse(atob(access_token.split('.')[1]));
-      setUser({ id: payload.sub || 'user', email: payload.sub || email });
-    } catch {
-      setUser({ id: 'user', email });
+      const response = await api.post(
+        '/auth/token',
+        new URLSearchParams({ username: email, password })
+      );
+      const { access_token } = response.data;
+      localStorage.setItem('token', access_token);
+      api.defaults.headers.common['Authorization'] = `Bearer ${access_token}`;
+
+      try {
+        const payload = JSON.parse(atob(access_token.split('.')[1]));
+        setUser({ id: payload.sub || 'user', email: payload.sub || email });
+      } catch {
+        setUser({ id: 'user', email });
+      }
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(error.response?.data?.detail || 'Login failed');
+      }
+      throw error;
     }
   };
 
   const register = async (email: string, password: string) => {
-    await api.post('/auth/register', { email, password });
-    await login(email, password);
+    try {
+      await api.post('/auth/register', { email, password });
+      await login(email, password);
+    } catch (error) {
+      if (axios.isAxiosError(error)) {
+        throw new Error(error.response?.data?.detail || 'Registration failed');
+      }
+      throw error;
+    }
   };
 
   return (

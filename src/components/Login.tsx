@@ -37,7 +37,8 @@ const Login: React.FC = () => {
         await login(email, password);
       }
     } catch (error) {
-      alert('Error: ' + error);
+      const message = error instanceof Error ? error.message : 'Authentication failed';
+      alert(message);
     } finally {
       setIsLoading(false);
     }
